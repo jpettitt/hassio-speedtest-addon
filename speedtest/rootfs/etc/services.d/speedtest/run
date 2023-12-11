@@ -56,3 +56,10 @@ bashio::log.info "--------- ---------"
 post_result "download" "Mbit/s" "Speedtest Download" $down_load_speed
 post_result "upload" "Mbit/s" "Speedtest Upload" $up_load_speed
 post_result "ping" "ms" "Speedtest Ping" $ping_latency
+
+
+if bashio::config.exists 'server_id'; then
+    post_result "download_${SERVER_ID}" "Mbit/s" "Speedtest Download" $down_load_speed
+    post_result "upload_${SERVER_ID}" "Mbit/s" "Speedtest Upload" $up_load_speed
+    post_result "ping_${SERVER_ID}" "ms" "Speedtest Ping" $ping_latency
+fi
