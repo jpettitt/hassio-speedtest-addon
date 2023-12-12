@@ -32,34 +32,50 @@ function post_result() {
     bashio::log.info "$friendlyname updated"
 }
 
-bashio::log.info "Starting speed test"
+function log_result() {
+    local $server_tag=""
+    if bashio::var.has_value ${1}); then
+        $server_tag="_${server}"
+    fi
+    post_result "download${server_tag}" "Mbit/s" "Speedtest Download" $down_load_speed
+    post_result "upload${server_tag}" "Mbit/s" "Speedtest Upload" $up_load_speed
+    post_result "ping${server_tag}" "ms" "Speedtest Ping" $ping_latency
+}
+
+function test_server() {
+    local server=${1}
+    if bashio::var.has_value(server) {
+        bashio::log.info "--------- Starting speed test for ${server} ---------"
+        export RESULT=$(/usr/local/bin/speedtest --format=json --precision=4 --accept-license --accept-gdpr -s "$server")
+    else
+        bashio::log.info "--------- Starting speed test (auto server) ---------"
+        export RESULT=$(/usr/local/bin/speedtest --format=json --precision=4 --accept-license --accept-gdpr)
+    fi
+    bashio::log.debug "Speedtest output: ${RESULT}"
+
+    export down_load_speed=$(printf %.2f "$(($(echo $RESULT | jq .download.bandwidth)*8/10000))e-2")
+    export up_load_speed=$(printf %.2f "$(($(echo $RESULT | jq .upload.bandwidth)*8/10000))e-2")
+    export ping_latency=$(echo $RESULT | jq .ping.latency)
+
+    bashio::log.info "--------- Speed Result ---------"
+    bashio::log.info "Download measured: $down_load_speed"
+    bashio::log.info "Upload: $up_load_speed"
+    bashio::log.info "Ping: $ping_latency"
+    bashio::log.info "--------- Speedtest Ended ---------"
+    log_result ${server}
+}
+
+
 
 if bashio::config.exists 'server_id'; then
-    export SERVER_ID=$(bashio::config 'server_id')
-    export RESULT=$(/usr/local/bin/speedtest --format=json --precision=4 --accept-license --accept-gdpr -s "$SERVER_ID")
+    test_server $(bashio::config 'server_id')
+elif bashio::config.exists 'servers'; then
+    servers=$(bashio::config 'servers')
+    bashio::log.info "Speedtest starting multi server tests"
+    for server = ${servers[@]}; do
+        test_server ${server}
+    done
+    bashio::log.info "Multi server tests complete"
 else
-    export RESULT=$(/usr/local/bin/speedtest --format=json --precision=4 --accept-license --accept-gdpr)
-fi
-
-bashio::log.debug "Speedtest output: ${RESULT}"
-
-export down_load_speed=$(printf %.2f "$(($(echo $RESULT | jq .download.bandwidth)*8/10000))e-2")
-export up_load_speed=$(printf %.2f "$(($(echo $RESULT | jq .upload.bandwidth)*8/10000))e-2")
-export ping_latency=$(echo $RESULT | jq .ping.latency)
-
-bashio::log.info "--------- Speed test ended ---------"
-bashio::log.info "Download measured: $down_load_speed"
-bashio::log.info "Upload: $up_load_speed"
-bashio::log.info "Ping: $ping_latency"
-bashio::log.info "--------- ---------"
-
-post_result "download" "Mbit/s" "Speedtest Download" $down_load_speed
-post_result "upload" "Mbit/s" "Speedtest Upload" $up_load_speed
-post_result "ping" "ms" "Speedtest Ping" $ping_latency
-
-
-if bashio::config.exists 'server_id'; then
-    post_result "download_${SERVER_ID}" "Mbit/s" "Speedtest Download" $down_load_speed
-    post_result "upload_${SERVER_ID}" "Mbit/s" "Speedtest Upload" $up_load_speed
-    post_result "ping_${SERVER_ID}" "ms" "Speedtest Ping" $ping_latency
+    test_server
 fi
